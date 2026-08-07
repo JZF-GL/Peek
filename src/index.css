@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-bg: #1a1a2e;
+  --color-dark-surface: #16213e;
+  --color-dark-border: #0f3460;
+  --color-dark-hover: #1a2744;
+  --color-accent: #e94560;
+  --color-accent-hover: #ff6b6b;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background-color: #1a1a2e;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+/* Electron drag region */
+.title-bar-drag {
+  -webkit-app-region: drag;
+}
+
+.title-bar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #313244;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #45475a;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #313244 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #313244;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #45475a;
+}
+
+/* File tree styles */
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.file-tree-item:hover {
+  background-color: #16213e;
+}
+
+.file-tree-item.active {
+  background-color: #0f3460;
+}
+
+/* Sidebar styles */
+.sidebar-section {
+  margin-bottom: 16px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+}
+
+/* Button styles */
+.btn-primary {
+  background-color: #e94560;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: background-color 0.15s;
+}
+
+.btn-primary:hover {
+  background-color: #ff6b6b;
+}
+
+.btn-secondary {
+  background-color: #0f3460;
+  color: #d1d5db;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: background-color 0.15s;
+}
+
+.btn-secondary:hover {
+  background-color: #16213e;
+}
+
+/* Markdown preview styles */
+.markdown-preview {
+  color: #d1d5db;
+  line-height: 1.75;
+}
+
+.markdown-preview h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #0f3460;
+}
+
+.markdown-preview h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.markdown-preview h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.markdown-preview p {
+  margin-bottom: 16px;
+}
+
+.markdown-preview code {
+  background-color: #16213e;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #e94560;
+  font-size: 0.875rem;
+}
+
+.markdown-preview pre {
+  background-color: #16213e;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.markdown-preview pre code {
+  background-color: transparent;
+  padding: 0;
+  color: #d1d5db;
+}
+
+.markdown-preview blockquote {
+  border-left: 4px solid #e94560;
+  padding-left: 16px;
+  margin: 16px 0;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.markdown-preview ul, .markdown-preview ol {
+  margin-left: 24px;
+  margin-bottom: 16px;
+}
+
+.markdown-preview li {
+  margin-bottom: 4px;
+}
+
+.markdown-preview a {
+  color: #e94560;
+  text-decoration: underline;
+}
+
+.markdown-preview a:hover {
+  color: #ff6b6b;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.markdown-preview th, .markdown-preview td {
+  border: 1px solid #0f3460;
+  padding: 8px 12px;
+}
+
+.markdown-preview th {
+  background-color: #16213e;
+}
+
+/* Image preview styles */
+.image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background-color: #16213e;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}

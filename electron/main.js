@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { TextDecoder } = require('util');
 
 let mainWindow;
@@ -30,11 +30,12 @@ function pushSessionBuffer(session, data) {
   }
 }
 
-// 递归终止进程树：Windows 用 taskkill /T /F，Unix 用进程组信号
+// 终止整个进程树（Windows 用 taskkill /T 递归）
+// 必须同步执行：应用退出前确保进程树已被终止，避免 npm/子进程残留
 function killProcessTree(proc) {
   if (process.platform === 'win32') {
     try {
-      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F']);
+      spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
     } catch (e) {
       console.warn('[Main] taskkill failed, fallback to kill:', e);
       proc.kill();
@@ -665,13 +666,14 @@ ipcMain.handle('fs:unwatchFile', (event, filePath) => {
   return true;
 });
 
-// 窗口关闭时清理所有监听器
+// 窗口关闭时清理所有监听器和终端进程
 app.on('before-quit', () => {
   for (const [targetPath] of watchers) {
     stopWatching(targetPath);
   }
-  // 清理所有终端进程
-  for (const [id] of terminalSessions) {
+  // 清理所有终端会话（同步 taskkill，确保 npm/终端进程在退出前被终止）
+  const sessionIds = [...terminalSessions.keys()];
+  for (const id of sessionIds) {
     stopTerminalSession(id);
   }
 });

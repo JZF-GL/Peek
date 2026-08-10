@@ -21,6 +21,8 @@ function removeShebangPlugin(): any {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 打包后 Electron 以 file:// 协议加载，必须使用相对路径
+  base: './',
   plugins: [
     removeShebangPlugin(),
     react(),

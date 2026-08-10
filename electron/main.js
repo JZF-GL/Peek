@@ -301,6 +301,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#1a1a2e',
     title: 'Peek - 文件查看器',
+    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: {

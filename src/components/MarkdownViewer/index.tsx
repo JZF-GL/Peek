@@ -6,6 +6,7 @@ import { Eye, Edit3, Save } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import { saveFileContent, readFileTextOnly } from '../../utils/fileUtils';
 import CodeEditor from '../Editor/CodeEditor';
+import DomSearchOverlay from '../Editor/DomSearchOverlay';
 
 interface MarkdownViewerProps {
   filePath: string;
@@ -17,6 +18,7 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, initialConten
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const previewRef = React.useRef<HTMLDivElement>(null);
   const { updateTabContent } = useFileStore();
 
   useEffect(() => {
@@ -124,7 +126,10 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, initialConten
             onChange={handleContentChange}
           />
         ) : (
-          <div className="markdown-preview p-8 max-w-4xl mx-auto">
+          <div
+            ref={previewRef}
+            className="markdown-preview p-8 max-w-4xl mx-auto"
+          >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
@@ -134,6 +139,8 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, initialConten
           </div>
         )}
       </div>
+      {/* 预览模式下的 Ctrl+F 搜索 */}
+      {!isEditing && <DomSearchOverlay containerRef={previewRef} />}
     </div>
   );
 };

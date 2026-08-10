@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Eye, Edit3, Save } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
-import { saveFileContent } from '../../utils/fileUtils';
+import { saveFileContent, readFileTextOnly } from '../../utils/fileUtils';
 import CodeEditor from '../Editor/CodeEditor';
 
 interface MarkdownViewerProps {
@@ -54,6 +54,25 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, initialConten
     window.addEventListener('keydown', handleSaveShortcut);
     return () => window.removeEventListener('keydown', handleSaveShortcut);
   }, [isEditing, isDirty, handleSave]);
+
+  // 监听外部文件变化，自动刷新未修改的内容
+  useEffect(() => {
+    const handleExternalChange = async (e: Event) => {
+      const changedPath = (e as CustomEvent<string>).detail;
+      if (changedPath !== filePath || isDirty || isSaving) return;
+      try {
+        const newContent = await readFileTextOnly(filePath);
+        if (newContent !== null) {
+          setContent(newContent);
+          setIsDirty(false);
+        }
+      } catch (err) {
+        console.error('Markdown 外部刷新失败:', err);
+      }
+    };
+    window.addEventListener('external-file-changed', handleExternalChange);
+    return () => window.removeEventListener('external-file-changed', handleExternalChange);
+  }, [filePath, isDirty, isSaving]);
 
   return (
     <div className="h-full flex flex-col bg-dark-bg">

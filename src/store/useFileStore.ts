@@ -27,6 +27,7 @@ interface FileStore {
   
   addFolder: (path: string, tree: FileNode[]) => void;
   removeFolder: (path: string) => void;
+  refreshFolder: (path: string, tree: FileNode[]) => void;
   addOpenedFile: (file: FileNode) => void;
   removeOpenedFile: (path: string) => void;
   toggleNode: (path: string) => void;
@@ -102,6 +103,19 @@ export const useFileStore = create<FileStore>()(
         set((state: FileStore) => ({
           folders: state.folders.filter((f: FolderItem) => f.path !== path),
         })),
+
+      refreshFolder: (path: string, tree: FileNode[]) =>
+        set((state: FileStore) => {
+          const existingIndex = state.folders.findIndex((f: FolderItem) => f.path === path);
+          if (existingIndex < 0) return {};
+          const newFolders = [...state.folders];
+          newFolders[existingIndex] = {
+            ...newFolders[existingIndex],
+            tree,
+            addedAt: Date.now(),
+          };
+          return { folders: newFolders };
+        }),
 
       addOpenedFile: (file: FileNode) =>
         set((state: FileStore) => {

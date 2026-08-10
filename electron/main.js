@@ -5,6 +5,70 @@ const fs = require('fs');
 let mainWindow;
 const isDev = !app.isPackaged;
 
+// 文件/目录监听器管理
+const watchers = new Map();
+
+// 防抖定时器
+const debounceTimers = new Map();
+
+function sendToRenderer(channel, ...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+}
+
+function debouncedEmit(key, channel, ...args) {
+  if (debounceTimers.has(key)) {
+    clearTimeout(debounceTimers.get(key));
+  }
+  const timer = setTimeout(() => {
+    debounceTimers.delete(key);
+    sendToRenderer(channel, ...args);
+  }, 300);
+  debounceTimers.set(key, timer);
+}
+
+function stopWatching(targetPath) {
+  if (watchers.has(targetPath)) {
+    try {
+      watchers.get(targetPath).close();
+    } catch (e) {
+      console.warn('[Main] Error closing watcher:', e);
+    }
+    watchers.delete(targetPath);
+  }
+  if (debounceTimers.has(targetPath)) {
+    clearTimeout(debounceTimers.get(targetPath));
+    debounceTimers.delete(targetPath);
+  }
+}
+
+function startWatchingFolder(dirPath) {
+  if (watchers.has(dirPath)) return;
+  try {
+    const watcher = fs.watch(dirPath, { recursive: true }, (eventType, filename) => {
+      console.log('[Main] Folder changed:', dirPath, eventType, filename);
+      debouncedEmit(dirPath, 'folder-changed', dirPath);
+    });
+    watchers.set(dirPath, watcher);
+  } catch (error) {
+    console.error('[Main] Failed to watch folder:', dirPath, error);
+  }
+}
+
+function startWatchingFile(filePath) {
+  if (watchers.has(filePath)) return;
+  try {
+    const watcher = fs.watch(filePath, (eventType, filename) => {
+      console.log('[Main] File changed:', filePath, eventType, filename);
+      sendToRenderer('file-changed', filePath);
+    });
+    watchers.set(filePath, watcher);
+  } catch (error) {
+    console.error('[Main] Failed to watch file:', filePath, error);
+  }
+}
+
 // 获取启动时传入的文件路径（通过命令行参数或文件关联）
 function getLaunchFilePaths() {
   const args = process.argv.slice(1);
@@ -335,5 +399,33 @@ ipcMain.on('drop-files', (event, filePaths) => {
   console.log('[Main] Received drop-files:', filePaths);
   if (mainWindow) {
     mainWindow.webContents.send('drop-files', filePaths);
+  }
+});
+
+// 文件夹/文件监听 IPC
+ipcMain.handle('fs:watchFolder', (event, dirPath) => {
+  startWatchingFolder(dirPath);
+  return true;
+});
+
+ipcMain.handle('fs:unwatchFolder', (event, dirPath) => {
+  stopWatching(dirPath);
+  return true;
+});
+
+ipcMain.handle('fs:watchFile', (event, filePath) => {
+  startWatchingFile(filePath);
+  return true;
+});
+
+ipcMain.handle('fs:unwatchFile', (event, filePath) => {
+  stopWatching(filePath);
+  return true;
+});
+
+// 窗口关闭时清理所有监听器
+app.on('before-quit', () => {
+  for (const [targetPath] of watchers) {
+    stopWatching(targetPath);
   }
 });

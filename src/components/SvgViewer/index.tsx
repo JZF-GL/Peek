@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Eye, Code2, RotateCw, ZoomIn, ZoomOut, Save, Loader2, AlertCircle } from 'lucide-react';
+import { readFileTextOnly } from '../../utils/fileUtils';
 import CodeEditor from '../Editor/CodeEditor';
 
 interface SvgViewerProps {
@@ -67,6 +68,24 @@ const SvgViewer: React.FC<SvgViewerProps> = ({ filePath, initialContent, onSave 
     window.addEventListener('keydown', handleSaveShortcut);
     return () => window.removeEventListener('keydown', handleSaveShortcut);
   }, [mode, onSave, svgContent]);
+
+  // 监听外部文件变化，自动刷新内容
+  useEffect(() => {
+    const handleExternalChange = async (e: Event) => {
+      const changedPath = (e as CustomEvent<string>).detail;
+      if (changedPath !== filePath) return;
+      try {
+        const newContent = await readFileTextOnly(filePath);
+        if (newContent !== null) {
+          setSvgContent(newContent);
+        }
+      } catch (err) {
+        console.error('SVG 外部刷新失败:', err);
+      }
+    };
+    window.addEventListener('external-file-changed', handleExternalChange);
+    return () => window.removeEventListener('external-file-changed', handleExternalChange);
+  }, [filePath]);
 
   const svgBase64 = React.useMemo(() => {
     try {

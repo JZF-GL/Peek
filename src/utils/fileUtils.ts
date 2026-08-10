@@ -284,6 +284,22 @@ export async function readFileContent(filePath: string): Promise<FileInfo | null
   }
 }
 
+// 仅读取文本内容，不更新最近文件/打开文件列表（用于自动刷新等场景）
+export async function readFileTextOnly(filePath: string): Promise<string | null> {
+  try {
+    const api = getElectronAPI();
+    if (api) {
+      const result = await api.fs.readTextFile(filePath);
+      return result?.content ?? null;
+    }
+    console.warn('readFileTextOnly 仅在 Electron 环境中可用');
+    return null;
+  } catch (error) {
+    console.error('Error reading text file:', error);
+    return null;
+  }
+}
+
 export async function saveFileContent(filePath: string, content: string): Promise<boolean> {
   try {
     const api = getElectronAPI();

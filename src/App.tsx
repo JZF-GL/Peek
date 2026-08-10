@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import TabBar from './components/Tabs/TabBar';
 import FileViewer from './components/FileViewer';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useFileStore } from './store/useFileStore';
-import { readFileContent, generateTabId } from './utils/fileUtils';
+import { readFileContent, generateTabId, buildFileTree } from './utils/fileUtils';
 import { AlertCircle, FileUp } from 'lucide-react';
 import type { FileInfo, Tab } from './types';
 import type { ElectronAPI } from './types/electron';
@@ -45,9 +45,13 @@ const SidebarWithErrorBoundary: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const { openTabs, activeTabId, addTab, setActiveTab, setCurrentFile } = useFileStore();
+  const { folders, openTabs, activeTabId, addTab, setActiveTab, setCurrentFile, refreshFolder } = useFileStore();
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const watchedFoldersRef = useRef<Set<string>>(new Set());
+  const watchedFilesRef = useRef<Set<string>>(new Set());
+  const unwatchFileRef = useRef<(() => void) | null>(null);
+  const unwatchFolderRef = useRef<(() => void) | null>(null);
 
   // 打开文件的统一方法
   const openFile = useCallback(async (filePath: string) => {
@@ -128,6 +132,85 @@ const App: React.FC = () => {
 
     initApp();
   }, [openFiles]);
+
+  // 注册文件夹/文件监听
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+    if (!electronAPI?.fs) return;
+
+    const fs = electronAPI.fs;
+
+    // 监听文件夹变化，刷新对应的文件树
+    unwatchFolderRef.current = fs.onFolderChanged(async (dirPath) => {
+      try {
+        const tree = await buildFileTree(dirPath);
+        refreshFolder(dirPath, tree);
+      } catch (err) {
+        console.error('刷新文件夹失败:', err);
+      }
+    });
+
+    // 监听文件变化，通过自定义事件通知 FileViewer 处理
+    unwatchFileRef.current = fs.onFileChanged((filePath) => {
+      window.dispatchEvent(new CustomEvent('external-file-changed', { detail: filePath }));
+    });
+
+    return () => {
+      unwatchFolderRef.current?.();
+      unwatchFolderRef.current = null;
+      unwatchFileRef.current?.();
+      unwatchFileRef.current = null;
+    };
+  }, [refreshFolder]);
+
+  // 根据 folders 变化注册/注销目录监听
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+    if (!electronAPI?.fs) return;
+
+    const fs = electronAPI.fs;
+    const currentFolderPaths = new Set(folders.map((f) => f.path));
+
+    // 新增
+    for (const folder of folders) {
+      if (!watchedFoldersRef.current.has(folder.path)) {
+        fs.watchFolder(folder.path).catch((err) => console.error('监听文件夹失败:', err));
+        watchedFoldersRef.current.add(folder.path);
+      }
+    }
+
+    // 移除
+    for (const watchedPath of Array.from(watchedFoldersRef.current)) {
+      if (!currentFolderPaths.has(watchedPath)) {
+        fs.unwatchFolder(watchedPath).catch((err) => console.error('取消监听文件夹失败:', err));
+        watchedFoldersRef.current.delete(watchedPath);
+      }
+    }
+  }, [folders]);
+
+  // 根据当前激活 tab 变化注册/注销文件监听
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+    if (!electronAPI?.fs) return;
+
+    const fs = electronAPI.fs;
+    const activeTab = openTabs.find((tab) => tab.id === activeTabId);
+    const activeFilePath = activeTab?.path;
+
+    // 清理不再监听的文件
+    for (const watchedPath of Array.from(watchedFilesRef.current)) {
+      if (watchedPath !== activeFilePath) {
+        fs.unwatchFile(watchedPath).catch((err) => console.error('取消监听文件失败:', err));
+        watchedFilesRef.current.delete(watchedPath);
+      }
+    }
+
+    // 监听当前文件
+    if (activeFilePath && !watchedFilesRef.current.has(activeFilePath)) {
+      fs.watchFile(activeFilePath).catch((err) => console.error('监听文件失败:', err));
+      watchedFilesRef.current.add(activeFilePath);
+    }
+  }, [openTabs, activeTabId]);
 
   // 键盘快捷键（Ctrl+S 的保存逻辑由各可编辑组件自行处理，这里只阻止浏览器默认保存行为）
   useEffect(() => {

@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Save, FileText, AlertCircle, RefreshCw } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
-import { readFileContent, saveFileContent, getLanguage, getFileType, getFileExtension } from '../../utils/fileUtils';
+import { readFileContent, readFileTextOnly, saveFileContent, getLanguage, getFileType, getFileExtension } from '../../utils/fileUtils';
 import CodeEditor from '../Editor/CodeEditor';
 import MarkdownViewer from '../MarkdownViewer';
 import ImageViewer from '../ImageViewer';
@@ -17,6 +17,7 @@ const FileViewer: React.FC = () => {
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastSavedAtRef = useRef<number>(0);
 
   const activeTab = openTabs.find((tab) => tab && tab.id === activeTabId);
   
@@ -26,6 +27,7 @@ const FileViewer: React.FC = () => {
     try {
       const success = await saveFileContent(filePath, content);
       if (success && activeTab) {
+        lastSavedAtRef.current = Date.now();
         markTabClean(activeTab.id);
       }
       return success;
@@ -61,6 +63,34 @@ const FileViewer: React.FC = () => {
       closeTab(activeTab.id);
     }
   }, [activeTab, closeTab]);
+
+  // 监听外部文件变化，自动刷新当前未修改的文件
+  useEffect(() => {
+    const handleExternalChange = async (e: Event) => {
+      const changedPath = (e as CustomEvent<string>).detail;
+      if (!activeTab || changedPath !== activeTab.path) return;
+      // 保存后 1 秒内忽略自身触发的事件，避免误刷新
+      if (Date.now() - lastSavedAtRef.current < 1000) return;
+      // 仅当文件未被修改时才自动刷新，避免覆盖用户编辑
+      if (activeTab.isDirty) return;
+
+      try {
+        const newContent = await readFileTextOnly(changedPath);
+        if (newContent !== null) {
+          setFileContents((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(changedPath, newContent);
+            return newMap;
+          });
+        }
+      } catch (err) {
+        console.error('外部刷新失败:', err);
+      }
+    };
+
+    window.addEventListener('external-file-changed', handleExternalChange);
+    return () => window.removeEventListener('external-file-changed', handleExternalChange);
+  }, [activeTab]);
 
   // Ctrl+S 快捷保存（代码/文本类型）
   useEffect(() => {

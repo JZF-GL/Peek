@@ -24,6 +24,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readBinaryFile: (filePath) => ipcRenderer.invoke('fs:readBinaryFile', filePath),
     writeTextFile: (filePath, content) => ipcRenderer.invoke('fs:writeTextFile', filePath, content),
     getFileInfo: (filePath) => ipcRenderer.invoke('fs:getFileInfo', filePath),
+    watchFolder: (dirPath) => ipcRenderer.invoke('fs:watchFolder', dirPath),
+    unwatchFolder: (dirPath) => ipcRenderer.invoke('fs:unwatchFolder', dirPath),
+    watchFile: (filePath) => ipcRenderer.invoke('fs:watchFile', filePath),
+    unwatchFile: (filePath) => ipcRenderer.invoke('fs:unwatchFile', filePath),
+    onFolderChanged: (callback) => {
+      const wrapped = (event, dirPath) => callback(dirPath);
+      ipcRenderer.on('folder-changed', wrapped);
+      return () => ipcRenderer.removeListener('folder-changed', wrapped);
+    },
+    onFileChanged: (callback) => {
+      const wrapped = (event, filePath) => callback(filePath);
+      ipcRenderer.on('file-changed', wrapped);
+      return () => ipcRenderer.removeListener('file-changed', wrapped);
+    },
   },
 
   // Shell API

@@ -17,6 +17,10 @@ export interface ElectronAPI {
     readBinaryFile: (filePath: string) => Promise<FileContent>;
     writeTextFile: (filePath: string, content: string) => Promise<boolean>;
     getFileInfo: (filePath: string) => Promise<FileInfoResult>;
+    createFile: (filePath: string) => Promise<boolean>;
+    createFolder: (dirPath: string) => Promise<boolean>;
+    copy: (sourcePath: string, targetPath: string) => Promise<boolean>;
+    delete: (targetPath: string) => Promise<boolean>;
     watchFolder: (dirPath: string) => Promise<boolean>;
     unwatchFolder: (dirPath: string) => Promise<boolean>;
     watchFile: (filePath: string) => Promise<boolean>;

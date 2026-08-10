@@ -323,3 +323,90 @@ export function getFileName(path: string): string {
 export function generateTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
+
+export async function createFile(filePath: string): Promise<boolean> {
+  try {
+    const api = getElectronAPI();
+    if (api) {
+      return await api.fs.createFile(filePath);
+    }
+    console.warn('createFile 仅在 Electron 环境中可用');
+    return false;
+  } catch (error) {
+    console.error('Error creating file:', error);
+    return false;
+  }
+}
+
+export async function createFolder(dirPath: string): Promise<boolean> {
+  try {
+    const api = getElectronAPI();
+    if (api) {
+      return await api.fs.createFolder(dirPath);
+    }
+    console.warn('createFolder 仅在 Electron 环境中可用');
+    return false;
+  } catch (error) {
+    console.error('Error creating folder:', error);
+    return false;
+  }
+}
+
+async function generateUniquePath(targetPath: string): Promise<string> {
+  const api = getElectronAPI();
+  if (!api) return targetPath;
+
+  const sep = targetPath.includes('/') ? '/' : '\\';
+  const lastSepIndex = targetPath.lastIndexOf(sep);
+  const dir = targetPath.substring(0, lastSepIndex);
+  const fullName = targetPath.substring(lastSepIndex + 1);
+
+  const dotIndex = fullName.lastIndexOf('.');
+  const hasExtension = dotIndex > 0;
+  const name = hasExtension ? fullName.substring(0, dotIndex) : fullName;
+  const ext = hasExtension ? fullName.substring(dotIndex) : '';
+
+  let counter = 1;
+  while (counter <= 1000) {
+    const candidate = `${dir}${sep}${name}_${counter}${ext}`;
+    const info = await api.fs.getFileInfo(candidate);
+    if (!info.exists) {
+      return candidate;
+    }
+    counter++;
+  }
+
+  return targetPath;
+}
+
+export async function copyFileOrFolder(sourcePath: string, targetPath: string): Promise<boolean> {
+  try {
+    const api = getElectronAPI();
+    if (!api) {
+      console.warn('copyFileOrFolder 仅在 Electron 环境中可用');
+      return false;
+    }
+
+    const targetInfo = await api.fs.getFileInfo(targetPath);
+    const finalTarget = targetInfo.exists ? await generateUniquePath(targetPath) : targetPath;
+
+    return await api.fs.copy(sourcePath, finalTarget);
+  } catch (error) {
+    console.error('Error copying file/folder:', error);
+    return false;
+  }
+}
+
+export async function deleteFileOrFolder(targetPath: string): Promise<boolean> {
+  try {
+    const api = getElectronAPI();
+    if (api) {
+      return await api.fs.delete(targetPath);
+    }
+    console.warn('deleteFileOrFolder 仅在 Electron 环境中可用');
+    return false;
+  } catch (error) {
+    console.error('Error deleting file/folder:', error);
+    return false;
+  }
+}

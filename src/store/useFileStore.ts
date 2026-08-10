@@ -22,9 +22,10 @@ interface FileStore {
   openTabs: Tab[];
   activeTabId: string | null;
   recentFiles: RecentFile[];
+  copiedItemPath: string | null;
   isLoading: boolean;
   error: string | null;
-  
+
   addFolder: (path: string, tree: FileNode[]) => void;
   removeFolder: (path: string) => void;
   refreshFolder: (path: string, tree: FileNode[]) => void;
@@ -44,6 +45,7 @@ interface FileStore {
   addRecentFile: (file: RecentFile) => void;
   removeRecentFile: (path: string) => void;
   clearRecentFiles: () => void;
+  setCopiedItemPath: (path: string | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -71,6 +73,7 @@ export const useFileStore = create<FileStore>()(
       openTabs: [],
       activeTabId: null,
       recentFiles: [],
+      copiedItemPath: null,
       isLoading: false,
       error: null,
 
@@ -225,6 +228,8 @@ export const useFileStore = create<FileStore>()(
         })),
 
       clearRecentFiles: () => set({ recentFiles: [] }),
+
+      setCopiedItemPath: (path: string | null) => set({ copiedItemPath: path }),
 
       setLoading: (loading: boolean) => set({ isLoading: loading }),
       setError: (error: string | null) => set({ error }),

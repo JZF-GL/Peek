@@ -383,6 +383,63 @@ ipcMain.handle('fs:getFileInfo', async (event, filePath) => {
   }
 });
 
+// 创建文件
+ipcMain.handle('fs:createFile', async (event, filePath) => {
+  try {
+    fs.writeFileSync(filePath, '', 'utf-8');
+    return true;
+  } catch (error) {
+    console.error('Error creating file:', error);
+    throw error;
+  }
+});
+
+// 创建文件夹
+ipcMain.handle('fs:createFolder', async (event, dirPath) => {
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+    return true;
+  } catch (error) {
+    console.error('Error creating folder:', error);
+    throw error;
+  }
+});
+
+// 复制文件/文件夹
+ipcMain.handle('fs:copy', async (event, sourcePath, targetPath) => {
+  try {
+    const stats = fs.statSync(sourcePath);
+    if (stats.isDirectory()) {
+      fs.cpSync(sourcePath, targetPath, { recursive: true, force: true });
+    } else {
+      fs.copyFileSync(sourcePath, targetPath);
+    }
+    return true;
+  } catch (error) {
+    console.error('Error copying:', error);
+    throw error;
+  }
+});
+
+// 删除文件/文件夹
+ipcMain.handle('fs:delete', async (event, targetPath) => {
+  try {
+    const stats = fs.statSync(targetPath);
+    if (stats.isDirectory()) {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+    } else {
+      fs.unlinkSync(targetPath);
+    }
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return true;
+    }
+    console.error('Error deleting:', error);
+    throw error;
+  }
+});
+
 // Shell IPC
 ipcMain.handle('shell:openExternal', async (event, url) => {
   await shell.openExternal(url);

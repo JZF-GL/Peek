@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Save, FileText, AlertCircle, RefreshCw } from 'lucide-react';
+import { Save, FileText, AlertCircle, RefreshCw, Play } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import { readFileContent, readFileTextOnly, saveFileContent, getLanguage, getFileType, getFileExtension } from '../../utils/fileUtils';
 import CodeEditor from '../Editor/CodeEditor';
@@ -10,10 +10,11 @@ import PdfViewer from '../PdfViewer';
 import WordViewer from '../WordViewer';
 import ExcelViewer from '../ExcelViewer';
 import PowerPointViewer from '../PowerPointViewer';
+import TerminalViewer from '../TerminalViewer';
 import UnsupportedFile from './UnsupportedFile';
 
 const FileViewer: React.FC = () => {
-  const { openTabs, activeTabId, updateTabContent, closeTab, markTabClean } = useFileStore();
+  const { openTabs, activeTabId, updateTabContent, closeTab, markTabClean, addTerminalTab } = useFileStore();
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +110,12 @@ const FileViewer: React.FC = () => {
   // 加载内容的 effect
   useEffect(() => {
     if (!activeTab || !activeTab.path) return;
+
+    // 终端标签页不需要加载文件内容
+    if (activeTab.type === 'terminal') {
+      setLoading(false);
+      return;
+    }
     
     const fileType = getFileType(activeTab.name);
     
@@ -181,6 +188,15 @@ const FileViewer: React.FC = () => {
 
   // 优先使用 tab 中已保存的 type，否则重新计算
   const fileType = activeTab.type || getFileType(activeTab.name);
+
+  // 终端标签页
+  if (fileType === 'terminal' || activeTab.type === 'terminal') {
+    if (!activeTab.terminalMeta) return null;
+    const { cwd, command } = activeTab.terminalMeta;
+    return (
+      <TerminalViewer key={activeTab.id} sessionId={activeTab.id} cwd={cwd} command={command} />
+    );
+  }
   
   // 调试信息
   console.log('DEBUG FileViewer:', {
@@ -248,6 +264,24 @@ const FileViewer: React.FC = () => {
 
   // 获取内容
   const content = fileContents.get(activeTab.path);
+
+  // package.json 运行指令解析：展示 scripts 按钮
+  const isPackageJson = activeTab.name === 'package.json';
+  let pkgScripts: { name: string; cmd: string }[] = [];
+  if (isPackageJson && typeof content === 'string') {
+    try {
+      const pkg = JSON.parse(content);
+      if (pkg.scripts && typeof pkg.scripts === 'object' && !Array.isArray(pkg.scripts)) {
+        pkgScripts = Object.entries(pkg.scripts).map(([name, cmd]) => ({
+          name,
+          cmd: String(cmd),
+        }));
+      }
+    } catch {
+      /* package.json 内容无效时忽略 */
+    }
+  }
+  const pkgDir = activeTab.path.replace(/[\\/][^\\/]*$/, '');
 
   // SVG 类型 - 特殊处理，可以预览和编辑
   if (fileType === 'svg') {
@@ -325,6 +359,22 @@ const FileViewer: React.FC = () => {
             <span className="text-sm">保存</span>
           </button>
         </div>
+        {pkgScripts.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-dark-surface border-b border-dark-border overflow-x-auto flex-shrink-0">
+            <span className="text-xs text-gray-500 flex-shrink-0">运行指令</span>
+            {pkgScripts.map((s) => (
+              <button
+                key={s.name}
+                onClick={() => addTerminalTab(pkgDir, `npm run ${s.name}`)}
+                title={s.cmd}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded bg-dark-bg hover:bg-dark-hover text-gray-300 border border-dark-border transition-colors flex-shrink-0"
+              >
+                <Play size={10} className="text-green-400" />
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex-1 overflow-hidden">
           <CodeEditor
             value={content}

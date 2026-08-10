@@ -10,6 +10,7 @@ import {
   Copy,
   ClipboardPaste,
   Trash2,
+  Terminal as TerminalIcon,
 } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import { buildFileTree, createFile, createFolder, copyFileOrFolder, deleteFileOrFolder } from '../../utils/fileUtils';
@@ -32,7 +33,7 @@ const FolderSection: React.FC<FolderSectionProps> = ({ folder }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [inputMode, setInputMode] = useState<'file' | 'folder' | null>(null);
   const [inputValue, setInputValue] = useState('');
-  const { folders, addFolder, removeFolder, setLoading, setError, copiedItemPath, setCopiedItemPath } = useFileStore();
+  const { folders, addFolder, removeFolder, addTerminalTab, setLoading, setError, copiedItemPath, setCopiedItemPath } = useFileStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -183,6 +184,16 @@ const FolderSection: React.FC<FolderSectionProps> = ({ folder }) => {
           {folder.name}
         </span>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              addTerminalTab(folder.path);
+            }}
+            className="p-1 rounded hover:bg-dark-border text-gray-500 hover:text-green-400"
+            title="在终端中打开"
+          >
+            <TerminalIcon size={12} />
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();

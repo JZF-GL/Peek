@@ -1,9 +1,193 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
+const { TextDecoder } = require('util');
 
 let mainWindow;
 const isDev = !app.isPackaged;
+
+// 终端会话管理
+const terminalSessions = new Map();
+const TERMINAL_BUFFER_MAX = 20000; // 缓存输出的最大字符数，供切回 tab 时恢复
+
+function getShellCommand() {
+  if (process.platform === 'win32') {
+    // /Q 静默启动；/K chcp 65001 把控制台代码页切换为 UTF-8，避免中文输出乱码
+    return { cmd: process.env.ComSpec || 'cmd.exe', args: ['/Q', '/K', 'chcp 65001 >nul'] };
+  }
+  return { cmd: process.env.SHELL || '/bin/bash', args: ['-i'] };
+}
+
+function sendOutputToRenderer(id, data) {
+  sendToRenderer('terminal-output', { id, data });
+}
+
+function pushSessionBuffer(session, data) {
+  session.buffer += data;
+  if (session.buffer.length > TERMINAL_BUFFER_MAX) {
+    session.buffer = session.buffer.slice(session.buffer.length - TERMINAL_BUFFER_MAX);
+  }
+}
+
+// 递归终止进程树：Windows 用 taskkill /T /F，Unix 用进程组信号
+function killProcessTree(proc) {
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F']);
+    } catch (e) {
+      console.warn('[Main] taskkill failed, fallback to kill:', e);
+      proc.kill();
+    }
+  } else {
+    try {
+      process.kill(-proc.pid, 'SIGTERM');
+    } catch (e) {
+      proc.kill();
+    }
+  }
+}
+
+// 停止终端会话，等待进程真正退出后再 resolve（避免端口未释放就重启）
+function stopTerminalSession(id) {
+  return new Promise((resolve) => {
+    const session = terminalSessions.get(id);
+    if (!session) {
+      resolve();
+      return;
+    }
+    terminalSessions.delete(id);
+    if (session.exited) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const done = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    // 最多等待 3 秒，防止进程无法退出时一直阻塞
+    const timer = setTimeout(done, 3000);
+    session.proc.once('exit', done);
+    try {
+      killProcessTree(session.proc);
+    } catch (e) {
+      console.warn('[Main] Error killing terminal process:', e);
+      done();
+    }
+  });
+}
+
+// 启动终端会话：command 为空时启动交互式 shell，否则运行指定命令
+ipcMain.handle('terminal:start', (event, { id, cwd, command }) => {
+  const existing = terminalSessions.get(id);
+  if (existing && !existing.exited) {
+    // 会话正在运行（切换 tab 回来），补发缓存的输出
+    if (existing.buffer) {
+      sendOutputToRenderer(id, existing.buffer);
+    }
+    return { started: false, existed: true };
+  }
+  if (existing) {
+    // 旧进程已退出，清理后重新创建
+    terminalSessions.delete(id);
+  }
+
+  let proc;
+  try {
+    // Unix 下使用独立进程组（detached），便于整体终止
+    const baseOpts = process.platform === 'win32' ? { cwd } : { cwd, detached: true };
+    if (command && command.trim()) {
+      // 运行指定命令（如 npm run build），shell 模式下支持 npm/yarn 等 .cmd 包装
+      let cmdLine = command.trim();
+      if (process.platform === 'win32') {
+        cmdLine = 'chcp 65001 >nul && ' + cmdLine;
+      }
+      proc = spawn(cmdLine, { ...baseOpts, shell: true });
+    } else {
+      const { cmd, args } = getShellCommand();
+      proc = spawn(cmd, args, baseOpts);
+    }
+  } catch (err) {
+    sendOutputToRenderer(id, `\r\n[错误] 无法启动终端: ${err.message}\r\n`);
+    return { started: false, existed: false };
+  }
+
+  const session = {
+    proc,
+    cwd,
+    command: command || '',
+    buffer: '',
+    exited: false,
+    // 流式 UTF-8 解码：避免多字节字符在数据块边界被切断导致乱码；
+    // stdout/stderr 各自独立解码器，防止两流交错破坏多字节序列
+    stdoutDecoder: new TextDecoder('utf-8'),
+    stderrDecoder: new TextDecoder('utf-8'),
+  };
+  terminalSessions.set(id, session);
+
+  const onData = (decoder) => (data) => {
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
+    const text = decoder.decode(buf, { stream: true });
+    pushSessionBuffer(session, text);
+    sendOutputToRenderer(id, text);
+  };
+
+  if (proc.stdout) proc.stdout.on('data', onData(session.stdoutDecoder));
+  if (proc.stderr) proc.stderr.on('data', onData(session.stderrDecoder));
+
+  proc.on('error', (err) => {
+    const text = `\r\n[错误] 无法启动进程: ${err.message}\r\n`;
+    pushSessionBuffer(session, text);
+    sendOutputToRenderer(id, text);
+    session.exited = true;
+  });
+
+  proc.on('exit', (code) => {
+    session.exited = true;
+    if (!session.exitedNotified) {
+      session.exitedNotified = true;
+      sendToRenderer('terminal-exit', { id, code });
+    }
+  });
+
+  return { started: true, existed: false };
+});
+
+// 向终端写入输入
+ipcMain.on('terminal:input', (event, { id, data }) => {
+  const session = terminalSessions.get(id);
+  if (session && !session.exited && session.proc.stdin) {
+    try {
+      // Windows 管道模式下 cmd 只识别 CRLF 回车：统一规范行结束符
+      const input =
+        process.platform === 'win32'
+          ? data.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n')
+          : data;
+      session.proc.stdin.write(input);
+    } catch (e) {
+      console.warn('[Main] Error writing to terminal:', e);
+    }
+  }
+});
+
+// 停止终端会话
+ipcMain.handle('terminal:stop', async (event, id) => {
+  await stopTerminalSession(id);
+  return true;
+});
+
+// 调整终端大小（无 pty，仅记录，供扩展）
+ipcMain.on('terminal:resize', (event, { id, cols, rows }) => {
+  const session = terminalSessions.get(id);
+  if (session) {
+    session.cols = cols;
+    session.rows = rows;
+  }
+});
 
 // 文件/目录监听器管理
 const watchers = new Map();
@@ -484,5 +668,9 @@ ipcMain.handle('fs:unwatchFile', (event, filePath) => {
 app.on('before-quit', () => {
   for (const [targetPath] of watchers) {
     stopWatching(targetPath);
+  }
+  // 清理所有终端进程
+  for (const [id] of terminalSessions) {
+    stopTerminalSession(id);
   }
 });

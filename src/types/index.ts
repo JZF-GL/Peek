@@ -14,7 +14,7 @@ export interface RecentFile {
   openedAt: number;
 }
 
-export type FileType = 'code' | 'markdown' | 'image' | 'svg' | 'pdf' | 'word' | 'excel' | 'powerpoint' | 'text' | 'binary' | 'unsupported';
+export type FileType = 'code' | 'markdown' | 'image' | 'svg' | 'pdf' | 'word' | 'excel' | 'powerpoint' | 'text' | 'binary' | 'unsupported' | 'terminal';
 
 export interface FileInfo {
   path: string;
@@ -25,6 +25,11 @@ export interface FileInfo {
   isDirty?: boolean;
 }
 
+export interface TerminalMeta {
+  cwd: string;
+  command?: string;
+}
+
 export interface Tab {
   id: string;
   path: string;
@@ -33,4 +38,5 @@ export interface Tab {
   content?: string;
   language?: string;
   isDirty: boolean;
+  terminalMeta?: TerminalMeta;
 }

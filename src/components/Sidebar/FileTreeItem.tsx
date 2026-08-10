@@ -19,6 +19,7 @@ import {
   Copy,
   ClipboardPaste,
   Trash2,
+  Terminal as TerminalIcon,
 } from 'lucide-react';
 import type { FileNode } from '../../types';
 import { useFileStore } from '../../store/useFileStore';
@@ -41,7 +42,7 @@ const FileTreeItem: React.FC<FileTreeItemProps> = ({ node, level, onRemove }) =>
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [inputMode, setInputMode] = useState<'file' | 'folder' | null>(null);
   const [inputValue, setInputValue] = useState('');
-  const { addTab, copiedItemPath, setCopiedItemPath } = useFileStore();
+  const { addTab, addTerminalTab, copiedItemPath, setCopiedItemPath } = useFileStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -238,6 +239,18 @@ const FileTreeItem: React.FC<FileTreeItemProps> = ({ node, level, onRemove }) =>
         )}
         {getFileIcon()}
         <span className="text-sm text-gray-300 truncate flex-1">{node.name}</span>
+        {node.type === 'directory' && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              addTerminalTab(node.path);
+            }}
+            className="p-0.5 rounded hover:bg-dark-border text-gray-500 hover:text-green-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="在终端中打开"
+          >
+            <TerminalIcon size={12} />
+          </button>
+        )}
         {onRemove && (
           <button
             onClick={(e) => {

@@ -31,6 +31,14 @@ export interface ElectronAPI {
   shell: {
     openExternal: (url: string) => Promise<boolean>;
   };
+  terminal: {
+    start: (id: string, cwd: string, command?: string) => Promise<{ started: boolean; existed: boolean }>;
+    write: (id: string, data: string) => void;
+    stop: (id: string) => Promise<boolean>;
+    resize: (id: string, cols: number, rows: number) => void;
+    onOutput: (callback: (payload: { id: string; data: string }) => void) => () => void;
+    onExit: (callback: (payload: { id: string; code: number }) => void) => () => void;
+  };
   app: {
     getLaunchFiles: () => Promise<string[]>;
     onOpenFiles: (callback: (filePaths: string[]) => void) => void;

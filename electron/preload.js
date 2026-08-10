@@ -49,6 +49,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   },
 
+  // 终端 API
+  terminal: {
+    start: (id, cwd, command) => ipcRenderer.invoke('terminal:start', { id, cwd, command }),
+    write: (id, data) => ipcRenderer.send('terminal:input', { id, data }),
+    stop: (id) => ipcRenderer.invoke('terminal:stop', id),
+    resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
+    onOutput: (callback) => {
+      const wrapped = (event, payload) => callback(payload);
+      ipcRenderer.on('terminal-output', wrapped);
+      return () => ipcRenderer.removeListener('terminal-output', wrapped);
+    },
+    onExit: (callback) => {
+      const wrapped = (event, payload) => callback(payload);
+      ipcRenderer.on('terminal-exit', wrapped);
+      return () => ipcRenderer.removeListener('terminal-exit', wrapped);
+    },
+  },
+
   // App API
   app: {
     getLaunchFiles: () => ipcRenderer.invoke('app:getLaunchFiles'),

@@ -34,6 +34,7 @@ interface FileStore {
   toggleNode: (path: string) => void;
   setCurrentFile: (file: FileInfo | null) => void;
   addTab: (tab: Tab) => void;
+  addTerminalTab: (cwd: string, command?: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => CloseResult;
   forceCloseAllTabs: () => void;
@@ -161,8 +162,31 @@ export const useFileStore = create<FileStore>()(
           };
         }),
 
+      // 添加终端标签页：cwd 为终端工作目录，command 为空时启动交互式 shell
+      addTerminalTab: (cwd: string, command?: string) =>
+        set((state: FileStore) => {
+          const folderName = cwd.split(/[\\/]/).filter(Boolean).pop() || cwd;
+          const tab: Tab = {
+            id: `term-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            path: `terminal://${cwd}`,
+            name: command ? `${folderName} › ${command}` : `${folderName} - 终端`,
+            type: 'terminal',
+            isDirty: false,
+            terminalMeta: { cwd, command },
+          };
+          return {
+            openTabs: [...state.openTabs, tab],
+            activeTabId: tab.id,
+          };
+        }),
+
       closeTab: (id: string) =>
         set((state: FileStore) => {
+          // 关闭终端标签时终止对应进程
+          const closedTab = state.openTabs.find((t: Tab) => t.id === id);
+          if (closedTab?.type === 'terminal' && typeof window !== 'undefined' && (window as any).electronAPI?.terminal) {
+            (window as any).electronAPI.terminal.stop(id);
+          }
           const tabs = state.openTabs.filter((t: Tab) => t.id !== id);
           let activeTabId = state.activeTabId;
           if (activeTabId === id) {
@@ -178,11 +202,21 @@ export const useFileStore = create<FileStore>()(
         return { hasDirty: dirtyTabs.length > 0, dirtyTabs };
       },
 
-      forceCloseAllTabs: () =>
+      forceCloseAllTabs: () => {
+        // 终止所有终端进程
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.terminal) {
+          const state = get();
+          for (const t of state.openTabs) {
+            if (t.type === 'terminal') {
+              (window as any).electronAPI.terminal.stop(t.id);
+            }
+          }
+        }
         set(() => ({
           openTabs: [],
           activeTabId: null,
-        })),
+        }));
+      },
 
       closeOtherTabs: (id: string): CloseResult => {
         const state = get();
@@ -191,14 +225,23 @@ export const useFileStore = create<FileStore>()(
         return { hasDirty: dirtyTabs.length > 0, dirtyTabs };
       },
 
-      forceCloseOtherTabs: (id: string) =>
+      forceCloseOtherTabs: (id: string) => {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.terminal) {
+          const state = get();
+          for (const t of state.openTabs) {
+            if (t.type === 'terminal' && t.id !== id) {
+              (window as any).electronAPI.terminal.stop(t.id);
+            }
+          }
+        }
         set((state: FileStore) => {
           const tabs = state.openTabs.filter((t: Tab) => t.id === id);
           return {
             openTabs: tabs,
             activeTabId: tabs[0]?.id ?? null,
           };
-        }),
+        });
+      },
 
       setActiveTab: (id: string | null) => set({ activeTabId: id }),
 

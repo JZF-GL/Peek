@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, FileText, Code, Image, File, ChevronDown, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { X, FileText, Code, Image, File, ChevronDown, MoreHorizontal, AlertTriangle, Terminal } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import type { Tab } from '../../types';
 
@@ -74,6 +74,8 @@ const TabBar: React.FC = () => {
         return <FileText size={14} className="text-green-400 flex-shrink-0" />;
       case 'image':
         return <Image size={14} className="text-purple-400 flex-shrink-0" />;
+      case 'terminal':
+        return <Terminal size={14} className="text-green-400 flex-shrink-0" />;
       default:
         return <File size={14} className="text-gray-400 flex-shrink-0" />;
     }

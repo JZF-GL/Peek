@@ -31,11 +31,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
   const renderVersionRef = useRef(0);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const containerWidthRef = useRef<number>(0);
+  const activeRenderTasksRef = useRef<{ cancel: () => void }[]>([]);
   
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [totalPages, setTotalPages] = useState(0);
   const [scale, setScale] = useState(1.0);
-  const [autoFitScale, setAutoFitScale] = useState(1.0);
+  const [autoFitScale, setAutoFitScale] = useState(0);
   const [manualRotation, setManualRotation] = useState(0);
   const [showAllPages, setShowAllPages] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -48,6 +49,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
   const [paginationPages, setPaginationPages] = useState<number[]>([]);
   const [autoFit, setAutoFit] = useState(true);
   const [maxPageWidth, setMaxPageWidth] = useState(0);
+  const [renderKey, setRenderKey] = useState(0);
 
   useEffect(() => {
     const cacheKey = `pdf:${filePath}`;
@@ -70,6 +72,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
           setManualRotation(0);
           setCurrentPage(1);
           setRenderedPages(new Set());
+          setRenderKey((k) => k + 1);
           setLoading(false);
           return;
         }
@@ -114,6 +117,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
         setManualRotation(0);
         setCurrentPage(1);
         setRenderedPages(new Set());
+        setRenderKey((k) => k + 1);
         setLoading(false);
       } catch (err) {
         console.error('PDF load error:', err);
@@ -177,8 +181,22 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
   // 实际使用的缩放比例（统一缩放）
   const actualScale = autoFit ? autoFitScale * scale : scale;
 
+  const cancelActiveRenderTasks = () => {
+    activeRenderTasksRef.current.forEach((task) => {
+      try {
+        task.cancel();
+      } catch (e) {
+        // 忽略取消异常
+      }
+    });
+    activeRenderTasksRef.current = [];
+  };
+
   const renderAllPages = useCallback(async () => {
-    if (!pdfDoc || pagesInfo.length === 0) return;
+    if (!pdfDoc || pagesInfo.length === 0 || !actualScale || actualScale <= 0) return;
+
+    // 取消旧渲染任务，防止同一 canvas 被并发渲染
+    cancelActiveRenderTasks();
 
     const currentVersion = ++renderVersionRef.current;
     setRendering(true);
@@ -194,7 +212,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
       const pageInfo = pagesInfo[i];
       const pageNumber = pageInfo.pageNumber;
       const canvas = document.getElementById(`pdf-canvas-${pageNumber}`) as HTMLCanvasElement;
-      
+
       if (!canvas) {
         continue;
       }
@@ -206,7 +224,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
         }
 
         const page = await pdfDoc.getPage(pageNumber);
-        
+
         if (renderVersionRef.current !== currentVersion) {
           setRendering(false);
           return;
@@ -231,24 +249,38 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
           canvasContext: context,
           viewport,
         });
+        activeRenderTasksRef.current.push(renderTask);
 
         await renderTask.promise;
+
+        activeRenderTasksRef.current = activeRenderTasksRef.current.filter((t) => t !== renderTask);
 
         if (renderVersionRef.current !== currentVersion) {
           setRendering(false);
           return;
         }
-        
-        setRenderedPages(prev => new Set([...prev, pageNumber]));
-        setRenderProgress(Math.round(((i + 1) / pagesInfo.length) * 100));
 
+        setRenderedPages((prev) => new Set([...prev, pageNumber]));
+        setRenderProgress(Math.round(((i + 1) / pagesInfo.length) * 100));
       } catch (err: any) {
-        if (renderVersionRef.current !== currentVersion || 
-            err?.name === 'RenderingCancelledException' ||
-            err?.message?.includes('same canvas')) {
+        activeRenderTasksRef.current = activeRenderTasksRef.current.filter(
+          (t) => t !== (err?.renderTask as unknown as { cancel: () => void })
+        );
+
+        if (renderVersionRef.current !== currentVersion) {
           setRendering(false);
           return;
         }
+
+        // 取消异常或 canvas 冲突时跳过该页，不中断后续渲染
+        if (
+          err?.name === 'RenderingCancelledException' ||
+          err?.message?.includes('same canvas')
+        ) {
+          console.warn(`Page ${pageNumber} render skipped:`, err.message || err.name);
+          continue;
+        }
+
         console.error(`Page ${pageNumber} render error:`, err);
       }
     }
@@ -263,8 +295,9 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
 
     return () => {
       renderVersionRef.current++;
+      cancelActiveRenderTasks();
     };
-  }, [pdfDoc, pagesInfo, actualScale, manualRotation, showAllPages, renderAllPages]);
+  }, [renderKey, pdfDoc, pagesInfo, actualScale, manualRotation, showAllPages, renderAllPages]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -296,14 +329,16 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
   }, [pagesInfo, showAllPages]);
 
   const renderSinglePage = useCallback(async () => {
-    if (!pdfDoc || !singleCanvasRef.current || pagesInfo.length === 0) return;
+    if (!pdfDoc || !singleCanvasRef.current || pagesInfo.length === 0 || !actualScale || actualScale <= 0) return;
+
+    cancelActiveRenderTasks();
 
     const currentVersion = ++renderVersionRef.current;
     setRendering(true);
 
     try {
       const page = await pdfDoc.getPage(currentPage);
-      
+
       if (renderVersionRef.current !== currentVersion) {
         setRendering(false);
         return;
@@ -337,8 +372,11 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
         canvasContext: context,
         viewport,
       });
+      activeRenderTasksRef.current.push(renderTask);
 
       await renderTask.promise;
+
+      activeRenderTasksRef.current = activeRenderTasksRef.current.filter((t) => t !== renderTask);
 
       if (renderVersionRef.current !== currentVersion) {
         setRendering(false);
@@ -347,11 +385,18 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
 
       setRendering(false);
     } catch (err: any) {
-      if (renderVersionRef.current !== currentVersion || 
-          err?.name === 'RenderingCancelledException') {
+      activeRenderTasksRef.current = [];
+
+      if (renderVersionRef.current !== currentVersion) {
         setRendering(false);
         return;
       }
+
+      if (err?.name === 'RenderingCancelledException') {
+        setRendering(false);
+        return;
+      }
+
       console.error('Single page render error:', err);
       setRendering(false);
     }
@@ -361,7 +406,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ filePath }) => {
     if (!showAllPages && pdfDoc) {
       renderSinglePage();
     }
-  }, [showAllPages, pdfDoc, currentPage, actualScale, manualRotation, renderSinglePage]);
+
+    return () => {
+      renderVersionRef.current++;
+      cancelActiveRenderTasks();
+    };
+  }, [renderKey, showAllPages, pdfDoc, currentPage, actualScale, manualRotation, renderSinglePage]);
 
   const handleZoomIn = () => {
     setScale(prev => Math.min(prev + 0.25, 3));

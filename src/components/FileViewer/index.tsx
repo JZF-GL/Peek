@@ -269,7 +269,7 @@ const FileViewer: React.FC = () => {
 
   // 办公文档类型 - 直接传递文件路径给专门的预览组件
   if (fileType === 'pdf') {
-    return <PdfViewer filePath={activeTab.path} />;
+    return <PdfViewer key={activeTab.path} filePath={activeTab.path} />;
   }
 
   if (fileType === 'word') {
